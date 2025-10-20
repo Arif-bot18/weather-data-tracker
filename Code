@@ -1,0 +1,136 @@
+# import the required libraries
+import pytz,os, requests, random
+import matplotlib.pyplot as plt
+from datetime import datetime
+from getpass import getpass
+import pandas as pd
+
+# getpass is a like a pass means it will store the api_key just like input but in this we  can't see the key after entering just like google password
+api_key = getpass("enter the open_weather_api_key")
+
+# os.environ will store the data which we just take from the getpass and store in a system environment because we can reuse it later nd and for reading aslo
+os.environ["open_weather_api_key"] = api_key
+# os.getenv will get the stored value by taking a variable name of it
+os.getenv("open_weather_api_key")
+
+# for storing the weather data CSV and excel
+out_csv = "weather_data.csv"
+out_excel = "weather_data.xlsx"
+
+# the cites which we want to get weather data
+cites = ["hyderabad,IN","Kerala,IN","tamilnadu,IN", "Mumbai,IN", "Shimla,IN"]
+# to store the data
+row = []
+
+# function for fetch the data parameter city, api_key
+def fetch_weather(city, api_key):
+    # url of weather map
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    # parameter of url for url we are not giving directly in url because of we Miss any thing or mistake it then it will show error and by giving param in requests method then it will handle the params correctly and make the format correctly
+    params = {"q":city,"appid":api_key,"units": "metric"}
+    res = requests.get(url,params = params,timeout= 10)
+    # converted to json to extract the data easily
+    res = res.json()
+
+    # extract the data and store in the variables
+    city = city
+    temp = res["main"]["temp"]
+    humidity = res["main"]["humidity"]
+    condition = res["weather"][0]["description"]
+    wind = res["wind"]["speed"]
+    # make it in key value pair for better understanding
+    data = {"city":city,"temp":temp,"humidity": humidity,"condition": condition,"wind":wind}
+    return data
+
+
+# simulation the weather data if we don't have api_key then we are creating a fake data
+def simulation_weather_data(city):
+    data = {"hyderabad":(90,54),"kerala":(32,68),"mumbai":(20,65)}
+    # get(key,(default value )) means if can't get the value then it will give the default value for that city
+    t_data,h_data = data.get(city,(10,7))
+
+    city= city
+    # creating a randomly generated data to visualise the data easily uniform will give the in between value and round will round the value in 1 decimal number after the point
+    temp = round(t_data+random.uniform(-5,5),1)
+    # random.radint will give the int value and we want that we can't go more than the 100 and leaa than 5 so we use min to take maximum 100 and use max to take minimum 5
+    humidity= int(max(min(h_data+random.randint(-20,20),100),5))
+    # choice will take a list and randomly select the value
+    condition= random.choice(["haze","broken clouds","smoke","few clouds","overcast clouds","light rain","scattered clouds"])
+    wind = round(random.uniform(0.5,6.0),1)
+    base = {"city": city,"temp":temp,"humidity": humidity,"condition": condition,"wind": wind}
+    return base
+
+# the function is used to get current time because we want make a log CSV file so we want the time and we have taken a function because of we want the time that when the data is store not for data fetch time
+def current_time():
+    # pytz will create a timezone for given country
+    tz = pytz.timezone("Asia/Kolkata")
+    # we want time by giving the timezone we can get the correct time
+    ct = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    return ct
+
+
+# main flow this will call the function for each city
+for city in cites:
+
+    try:
+       # we will try to extract the data if the api_key is there and in correct form
+       if api_key:
+           w = fetch_weather(city,api_key)
+       # if api_key not there then simulation we give the random values
+       else:
+           w = simulation_weather_data(city)
+    # this will execute when api_key is there but requests fail then the exception block will handle
+    except Exception as e:
+        print(f" we can't get data from {city}.{e} so we are using a simulation")
+        w = simulation_weather_data(city)
+    data = {"time": current_time(),"city":city,"temp":w["temp"],"humidity":w["humidity"],"condition":w["condition"],"wind":w["wind"]}
+    # and then we are storing the values in the list
+    row.append(data)
+
+for i in row:
+    print(i)
+
+
+# then we are storing the the data in the files if file exists then we are concat the new values
+if os.path.exists(out_csv):
+    df_old = pd.read_csv(out_csv)
+else:
+    df_old = pd.DataFrame()
+df_new = pd.DataFrame(row)
+df_all = pd.concat([df_old,df_new],ignore_index=True)
+df_csv = df_all.to_csv(out_csv,index=False, encoding="utf-8")
+df_xlsx = df_all.to_excel(out_excel,index=False)
+print(f"the data of {len(df_new)} is store to {out_csv},{out_excel}")
+
+# for data visualization we want to plot the data for each city by taking the last n values
+
+for city in cites:
+    # we are creating a mask that will give a city for all data
+    city_df = df_all[df_all["city"] == city ].copy()
+    if city_df.empty:
+        print(f"No data for {city} yet ")
+        continue
+    # converted the time in pandas date and time
+    city_df["time"] = pd.to_datetime(city_df["time"])
+    # sort the data by the time like the old come fist then new after
+    city_df = city_df.sort_values("time").tail(5)
+    # plot the graph 📉 for temparature
+    plt.figure(figsize=(9,3.5))
+    plt.plot(city_df["time"],city_df["temp"],marker="o")
+    plt.title(f"{city} temperature for the last{len(city_df)} readings")
+    plt.xlabel("time")
+    plt.ylabel("temp")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+
+    # plot the graph 📉 for humidity
+    plt.figure(figsize=(9,3.5))
+    plt.plot(city_df["time"],city_df["humidity"], marker="o")
+    plt.title(f"humidity for {city} and last{len(city_df)} readings")
+    plt.xlabel("time")
+    plt.ylabel("humidity")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
